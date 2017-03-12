@@ -1,0 +1,1523 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Diggin it minceraft style</title>
+<style>
+canvas {
+    border: 1px solid #999999;
+}
+.move {
+    width: 100px;
+    height: 100px;
+}
+.pup {
+    width: 50px;
+    height:75px;
+}
+</style>
+<script>
+/**
+ * Ripped from http://stackoverflow.com/questions/1255512/how-to-draw-a-rounded-rectangle-on-html-canvas
+ * 
+ * Draws a rounded rectangle using the current state of the canvas.
+ * If you omit the last three params, it will draw a rectangle
+ * outline with a 5 pixel border radius
+ * @param {CanvasRenderingContext2D} ctx
+ * @param {Number} x The top left x coordinate
+ * @param {Number} y The top left y coordinate
+ * @param {Number} width The width of the rectangle
+ * @param {Number} height The height of the rectangle
+ * @param {Number} [radius = 5] The corner radius; It can also be an object 
+ *                 to specify different radii for corners
+ * @param {Number} [radius.tl = 0] Top left
+ * @param {Number} [radius.tr = 0] Top right
+ * @param {Number} [radius.br = 0] Bottom right
+ * @param {Number} [radius.bl = 0] Bottom left
+ * @param {Boolean} [fill = false] Whether to fill the rectangle.
+ * @param {Boolean} [stroke = true] Whether to stroke the rectangle.
+ */
+function roundRect(ctx, x, y, width, height, radius, fill, stroke) {
+  if (typeof stroke == 'undefined') {
+    stroke = true;
+  }
+  if (typeof radius === 'undefined') {
+    radius = 5;
+  }
+  if (typeof radius === 'number') {
+    radius = {tl: radius, tr: radius, br: radius, bl: radius};
+  } else {
+    var defaultRadius = {tl: 0, tr: 0, br: 0, bl: 0};
+    for (var side in defaultRadius) {
+      radius[side] = radius[side] || defaultRadius[side];
+    }
+  }
+  ctx.beginPath();
+  ctx.moveTo(x + radius.tl, y);
+  ctx.lineTo(x + width - radius.tr, y);
+  ctx.quadraticCurveTo(x + width, y, x + width, y + radius.tr);
+  ctx.lineTo(x + width, y + height - radius.br);
+  ctx.quadraticCurveTo(x + width, y + height, x + width - radius.br, y + height);
+  ctx.lineTo(x + radius.bl, y + height);
+  ctx.quadraticCurveTo(x, y + height, x, y + height - radius.bl);
+  ctx.lineTo(x, y + radius.tl);
+  ctx.quadraticCurveTo(x, y, x + radius.tl, y);
+  ctx.closePath();
+  if (fill) {
+    ctx.fill();
+  }
+  if (stroke) {
+    ctx.stroke();
+  }
+
+}
+function random(s){
+    if(s == undefined || s == false || seed2 == undefined || seed2 == false){
+        return Math.random();
+    }else{
+        var tempSeed = s;
+        seed = ((s - seed2 + 1) ^ seed2);
+        seed2 = tempSeed;
+        //console.log((seed % 1000)/1000);
+        return Math.abs((seed % 1000)/1000);
+    }
+}
+var tiles = [];
+var texts = [];
+var transitions = [];
+var entities = [];
+var player;
+var playerTurn = true;
+var playerAbility = 0;
+var abilities = [
+    "Beta",
+    "Sigma",
+    "Delta",
+    "Null",
+    "Bracket",
+    "Lucifer"
+];
+var shovels = 0;
+var lives = 3;
+var freezes = 0;
+var freezeFrames = 0;
+var difficultyLevel = 0;
+var quickMode = false;
+var seed;
+var seed2;
+var msTimer = 0;
+// 0: Normal: Checkpoints every level, infinite lives
+// 1: Extra Mode: Checkpoints every 5 levels, infinite lives
+// 2: Hardcore: Checkpoints every 5 levels, 3 lives
+// 3: Coda Mode: No checkpoints
+// 4: Speedrun mode: Hardcore with no extra life powerups as well as seed-based generation
+var dirs = [[-2, 0], [2, 0], [0, -2], [0, 2]];
+var dDirs = [[-1, -1], [1, 1], [1, -1], [-1, 1]]
+var specialSauce = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+var bracket = [
+    [[0, 0], [-1, -1], [-2, -2], [-1, 1], [-2, 2]],
+    [[0, 0], [1, 1], [2, 2], [1, -1], [2, -2]],
+    [[0, 0], [1, -1], [2, -2], [-1, -1], [-2, -2]],
+    [[0, 0], [-1, 1], [-2, 2], [1, 1], [2, 2]]
+];
+var LRUD = [[-1, 0], [1, 0], [0, -1], [0, 1]];
+var knightMoves = [[2, 1], [1, 2], [-1, -2], [-2, -1], [-1, 2], [-2, 1], [1, -2], [2, -1]];
+var tilesToClear = [];
+var enemTypes = [
+    "particle",
+    "wall",
+    "chaser",
+    "digger",
+    "maker",
+    "hybrid",
+    "lunger",
+    "phaser",
+    "crazy",
+    "trapper",
+    "thinker",
+    "freeze",
+    "shovel",
+    "particle"
+];
+var enemColors = [
+    "#000000",
+    "#b56900",
+    "#ff4444",
+    "#44dd44",
+    "#dddd44",
+    "#ff9944",
+    "#9944ff",
+    "#ff44ff",
+    "#99ffff",
+    "#005544",
+    "#000044",
+    "#fa55ad",
+    "#dedede",
+    "white"
+]
+var features = [
+    [ //Freeze in walls
+        [0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0],
+        [0, 1, -3, 1, 0],
+        [0, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0]
+    ],
+    [ //Random enemy in walls
+        [0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 0],
+        [0, 1, "r", 1, 0],
+        [0, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0]
+    ],
+    [ //Powerup Stockpile
+        [0, 1, 2, 1, 0],
+        [1, -2, -3, -2, 1],
+        [1, -3, -2, -3, 1],
+        [1, -2, -3, -2, 1],
+        [0, 1, 1, 1, 0]
+    ],
+    [//Dangerous powerups
+        [0, 0, 0, 0, 0],
+        [0, -2, -2, -2, 0],
+        [0, -3, 6, -3, 0],
+        [0, -2, -2, -2, 0],
+        [0, 0, 0, 0, 0]
+    ],
+    [ //Crazy spamming (Crazy 8)
+        [0, 0, 0, 0, 0],
+        [0, 8, -3, 8, 0],
+        [0, -3, 8, -3, 0],
+        [0, 8, -3, 8, 0],
+        [0, 0, 0, 0, 0]
+    ],
+    [ //French Flag
+        [0, 0, 0, 0, 0],
+        [-3, 1, 1, 1, -3],
+        [1, 10, 0, 2, 1],
+        [1, 10, 0, 2, 1],
+        [-3, 1, 1, 1, -3],
+        [0, 0, 0, 0, 0]
+    ],
+    [ //:)
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 0, 0, 1, 0, 0],
+        [0, 1, -3, 0, 0, 1, 0],
+        [0, 0, 0, 0, 0, 1, 0],
+        [0, 1, -3, 0, 0, 1, 0],
+        [0, 1, 0, 0, 1, 0, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+    ],
+    [
+        [0, 0, 0, 0, 0, 0, 0],
+        [0, 1, 1, 1, 1, 1, 0],
+        [0, 1, -3, -3, -3, 1, 0],
+        [1, 7, -3, 7, -3, 7, 1],
+        [0, 1, -3, -3, -3, 1, 0],
+        [0, 1, 1, 1, 1, 1, 0],
+        [0, 0, 0, 0, 0, 0, 0],
+    ]
+    /*[ //Thinker Stockpile
+        [0, 1, 1, 1, 0],
+        [1, 1, 10, 1, 1],
+        [1, 10, 10, 10, 1],
+        [1, 1, 10, 1, 1],
+        [0, 1, 1, 1, 0]
+    ]*/
+];
+var featureProbs = [
+    0.25,
+    0.25,
+    0.2,
+    0.25,
+    0.1,
+    0.05,
+    0.02,
+    0.075
+];
+var images = {
+    shovel: new Image(),
+    heart: new Image(),
+    freeze: new Image()
+}
+images.shovel.src = "./shovel.png";
+images.freeze.src = "./freeze.png";
+var prob = {
+    numE: 0,
+    wall: 0,
+    chaser: 1,
+    digger: 0,
+    maker: 0,
+    hybrid: 0,
+    lunger: 0,
+    phaser: 0,
+    crazy: 0,
+    trapper: 0,
+    thinker: 0
+};
+function clearProb(){
+    prob.chaser = 0;
+    prob.digger = 0;
+    prob.maker = 0;
+    prob.hybrid = 0;
+    prob.lunger = 0;
+    prob.phaser = 0;
+    prob.crazy = 0;
+    prob.trapper = 0;
+    prob.thinker = 0;
+}
+function changeProb(){
+    var l = GAME.level;
+    prob.wall = Math.min(0.005 * l, 0.2);
+    if(l <= 2){
+        clearProb();
+        prob.chaser = 1;
+    }else if(l > 2 && l < 4){
+        prob.chaser = 0.5;
+        prob.digger = 0.5;
+    }else if(l < 7){
+        prob.chaser = 0.4;
+        prob.digger = 0.3;
+        prob.maker = 0.3;
+    }else if(l == 7){
+        clearProb();
+        if(abilities[playerAbility] == "Null"){
+            prob.wall = 0.2;
+        }
+        prob.hybrid = 1;
+    }else if(l < 10){
+        prob.chaser = 0.4;
+        prob.hybrid = 0.1;
+        prob.digger = 0.2;
+        prob.maker = 0.3;
+    }else if(l == 10){
+        clearProb();
+        prob.lunger = 0.5;
+        prob.maker = 0.5;
+    }else if(l < 15){
+        prob.chaser = 0.45;
+        prob.hybrid = 0.05;
+        prob.digger = 0.2;
+        prob.maker = 0.2;
+        prob.lunger = 0.1;
+    }else if(l == 15){
+        clearProb();
+        prob.phaser = 1;
+    }else if(l < 20){
+        prob.chaser = 0.225;
+        prob.hybrid = 0.05;
+        prob.digger = 0.2;
+        prob.maker = 0.2;
+        prob.lunger = 0.1;
+        prob.phaser = 0.225;
+    }else if(l == 20){
+        clearProb();
+        prob.crazy = 1;
+    }else if(l < 30){
+        prob.chaser = 0.05;
+        prob.hybrid = 0.05;
+        prob.digger = 0.2;
+        prob.maker = 0.1;
+        prob.lunger = 0.1;
+        prob.phaser = 0.25;
+        prob.crazy = 0.25;
+    }else if(l == 30){
+        clearProb();
+        prob.trapper = 0.75;
+        prob.digger = 0.25;
+    }else if(l < 42){
+        prob.chaser = 0.05;
+        prob.hybrid = 0.1;
+        prob.digger = 0.225;
+        prob.maker = 0.05;
+        prob.lunger = 0.1;
+        prob.phaser = 0.225;
+        prob.crazy = 0.15;
+        prob.trapper = 0.1;
+    }else if(l == 42){
+        clearProb();
+        prob.wall = 0;
+        prob.thinker = 0.75;
+        prob.digger = 0.25;
+    }else{
+        prob.chaser = 0.05;
+        prob.hybrid = 0.15;
+        prob.digger = 0.15;
+        prob.maker = 0.1;
+        prob.lunger = 0.125;
+        prob.phaser = 0.1;
+        prob.crazy = 0.125;
+        prob.trapper = 0.05;
+        prob.thinker = 0.15;
+    }
+    instructions(true);
+}
+function populate(){
+    entities = [];
+    playerTurn = true;
+    player.position = {x:20, y:20};
+    player.coords = {x:0, y:0};
+    player.dir = 0;
+    tiles = [];
+    console.log("ayy lmao");
+    for(var i = 0; i < GAME.pFieldDim.y; i++){
+        var tileRow = [];
+        for(var j = 0; j < GAME.pFieldDim.x; j++){
+            /**
+             * TODO: Make map creation function
+            **/
+            if((i < GAME.pFieldDim.y - 7 || j < GAME.pFieldDim.x - 7) && (i > 4 || j > 4)){
+                var r = random(seed);
+                if(r <= prob.wall){
+                    tileRow.push(1);
+                    entities.push(new Entity(20 + j * (660/GAME.pFieldDim.x), 20 + i * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, "wall", "#b56900", null, j, i));
+                }else if(r <= prob.wall + 0.003){
+                    tileRow.push(-2);
+                    entities.push(new Entity(20 + j * (660/GAME.pFieldDim.x), 20 + i * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, "shovel", "#ddddff", null, j, i));
+                }else if(r <= prob.wall + 0.0045){
+                    tileRow.push(-3);
+                    entities.push(new Entity(20 + j * (660/GAME.pFieldDim.x), 20 + i * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, "freeze", "#ddddff", null, j, i));
+                }else{
+                    tileRow.push(0);
+                }
+            }else{
+                tileRow.push(0);
+            }
+        }
+        tiles.push(tileRow);
+    }
+    for(var e = 0; e < Math.floor(Math.sqrt(GAME.level * 3)); e++){
+        var TYPE;
+        var COLOR;
+        var TAG;
+        var r = random(seed);
+        var x = Math.floor(7 + random(seed) * (GAME.pFieldDim.x - 7));
+        var y = Math.floor(7 + random(seed) * (GAME.pFieldDim.y - 7));
+        if(r <= prob.chaser){
+            TYPE = "chaser";
+            COLOR = "#ff4444";
+            TAG = 2;
+        }else if(r <= prob.chaser + prob.digger){
+            TYPE = "digger";
+            COLOR = "#44dd44";
+            TAG = 3;
+        }else if(r <= prob.chaser + prob.digger + prob.maker){
+            TYPE = "maker";
+            COLOR = "#dddd44";
+            TAG = 4;
+        }else if(r <= prob.chaser + prob.digger + prob.maker + prob.hybrid){
+            TYPE = "hybrid";
+            COLOR = "#ff9944";
+            TAG = 5;
+        }else if(r <= prob.chaser + prob.digger + prob.maker + prob.hybrid + prob.lunger){
+            TYPE = "lunger";
+            COLOR = "#9944ff";
+            TAG = 6;
+        }else if(r <= prob.chaser + prob.digger + prob.maker + prob.hybrid + prob.lunger + prob.phaser){
+            TYPE = "phaser";
+            COLOR = "#ff44ff";
+            TAG = 7;
+        }else if(r <= prob.chaser + prob.digger + prob.maker + prob.hybrid + prob.lunger + prob.phaser + prob.crazy){
+            TYPE = "crazy";
+            COLOR = "#99ffff";
+            TAG = 8;
+        }else if(r <= prob.chaser + prob.digger + prob.maker + prob.hybrid + prob.lunger + prob.phaser + prob.crazy + prob.trapper){
+            TYPE = "trapper";
+            COLOR = "#005544";
+            TAG = 9;
+        }else if(r <= prob.chaser + prob.digger + prob.maker + prob.hybrid + prob.lunger + prob.phaser + prob.crazy + prob.trapper + prob.thinker){
+            TYPE = "thinker";
+            COLOR = "#000044";
+            TAG = 10;
+        }
+        entities.push(new Entity(20 + x * (660/GAME.pFieldDim.x), 20 + y * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, TYPE, COLOR, null, x, y));
+        tiles[y][x] = 2;
+    }
+    for(var f in features){
+        if(random(seed) <= featureProbs[f] && GAME.level > 10){
+            var startingPoint = {
+                x: Math.floor(random(seed) * (GAME.pFieldDim.x - 20) + 10),
+                y: Math.floor(random(seed) * (GAME.pFieldDim.y - 20) + 10)
+            }
+            for(var I in features[f]){
+                for(var J in features[f][I]){
+                    //console.log(startingPoint);
+                    //console.log(startingPoint.x + Number(J));
+                    //console.log(tiles[startingPoint.x + J][startingPoint.y + I]);
+                    for(var i in entities){
+                        if(entities[i].coords.x == startingPoint.x + Number(J) && entities[i].coords.y == startingPoint.y + Number(I)){
+                            entities.splice(i, 1);
+                        }
+                    }
+                    tiles[startingPoint.y + Number(I)][startingPoint.x + Number(J)] = features[f][I][J];
+                    var type;
+                    var color;
+                    var F = features[f][I][J]
+                    if(F != "r" && F != 0){
+                        type = enemTypes[(enemTypes.length + F) % enemTypes.length];
+                        color = enemColors[(enemTypes.length + F) % enemTypes.length];
+                    }else if(features[f][I][J] == "r"){
+                        var r = Math.floor(random(seed) * 8 + 1)
+                        type = enemTypes[r];
+                        color = enemColors[r];
+                    }
+                    if(features[f][I][J] != 0){
+                    //console.log("AYY LMAO");
+                        entities.push(new Entity(20 + (startingPoint.x + Number(J)) * (660/GAME.pFieldDim.x), 20 + (startingPoint.y + Number(I)) * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, type, color, null, startingPoint.x + Number(J), startingPoint.y + Number(I)));
+                    }else{
+                        console.log("ayy lamo");
+                        dig(startingPoint.x + Number(J), startingPoint.y + Number(I));
+                    }
+                }
+            }
+        }
+    }
+}
+function init(){
+    GAME.start();
+    player = new Entity(20, 20, (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, "player", "#0099FF", null, 0, 0);
+    populate();
+}
+var GAME = {
+    canvas: document.createElement("canvas"),
+    start: function(){
+        this.canvas.width = 900;
+        this.canvas.height = 600;
+        this.context = this.canvas.getContext("2d");
+        document.body.insertBefore(this.canvas, document.body.childNodes[0]);
+        this.frameCount = 0;
+        this.interval = setInterval(draw, 20);
+    },
+    clear: function(){
+        this.context.clearRect(0, 0, this.canvas.width, this.canvas.height);
+    },
+    gravity: 0.5,
+    level: 0,
+    checkpoint: 0,
+    pFieldDim: {x: 30, y: 25}
+}
+if(localStorage.lvl){
+    GAME.level = Number(localStorage.lvl);
+    GAME.checkpoint = Number(localStorage.lvl);
+    changeProb(GAME.level);
+}else{
+    localStorage.lvl = 0;
+}
+if(localStorage.shovels){
+    shovels = Number(localStorage.shovels);
+}else{
+    localStorage.shovels = 0;
+}
+if(localStorage.freezes){
+    freezes = Number(localStorage.freezes);
+}else{
+    localStorage.freezes = 0;
+}
+function loadSeed(){
+    if(difficultyLevel == 4){
+        if(localStorage.seed && localStorage.seed2){
+            seed = localStorage.seed;
+            seed2 = localStorage.seed2;
+        }
+    }
+}
+function Entity(X, Y, width, height, type, color, text, coordX, coordY, friction){
+    this.position = {x: X, y: Y};
+    this.width = width;
+    this.height = height;
+    this.type = type;
+    this.velocity = {x: 0, y: 0};
+    this.coords = {x: coordX, y: coordY};
+    this.color = color;
+    this.text = text;
+    this.friction = friction;
+    this.timer = 0;
+    this.draw = function(){
+        CTX = GAME.context;
+        CTX.fillStyle = this.color;
+        if(!this.static){
+            this.position.x += this.velocity.x;
+            this.position.y += this.velocity.y;
+            if(this.gravity){
+                this.velocity.y += GAME.gravity;
+            }
+            if(this.friction){
+                this.velocity.x *= 0.95;
+                this.velocity.y *= 0.95;
+            }
+            //console.log(this.position.x);
+        }
+        if(this.text != undefined){
+            CTX.font = this.width + " " + this.height;
+            CTX.fillText(this.text, this.position.x, this.position.y);
+        }
+        switch(type){
+            case "player":
+                roundRect(CTX, this.position.x, this.position.y, this.width, this.height, (this.width + this.height)/10, true, false);
+                CTX.fillStyle = "white";
+                roundRect(CTX, this.position.x + this.width/2 - 2.5 + 8 * LRUD[this.dir][0], this.position.y + this.height/2 - 2.5 + 8 * LRUD[this.dir][1], 5, 5, 2.5, true, false);
+            break;
+            case "particle":
+                CTX.globalAlpha = 1 - this.timer/this.lifespan;
+                this.timer++;
+                roundRect(CTX, this.position.x, this.position.y, this.width, this.height, (this.width + this.height)/4, true, false);
+                CTX.globalAlpha = 1;
+            break;
+            case "shovel":
+                CTX.drawImage(images.shovel, this.position.x, this.position.y, this.width, this.height);
+            break;
+            case "shovelM":
+                CTX.globalAlpha = 1 - this.timer/this.lifespan;
+                this.timer++;
+                CTX.drawImage(images.shovel, this.position.x, this.position.y, this.width, this.height);
+                CTX.globalAlpha = 1;
+            break;
+            case "freeze":
+                CTX.drawImage(images.freeze, this.position.x, this.position.y, this.width, this.height);
+            break;
+            default:
+                roundRect(CTX, this.position.x, this.position.y, this.width, this.height, (this.width + this.height)/10, true, false);
+                if(this.type == "lunger" && abilities[playerAbility] == "Lucifer"){
+                    //console.log("AYYY");
+                    var mos = {
+                        x: this.position.x + this.width/2,
+                        y: this.position.y + this.height/2,
+                    };
+                    CTX.strokeStyle = "#FF0000";
+                    CTX.beginPath();
+                    CTX.moveTo(mos.x, mos.y);
+                    CTX.lineTo(mos.x - 900, mos.y);
+                    CTX.stroke();
+                    CTX.beginPath();
+                    CTX.moveTo(mos.x, mos.y);
+                    CTX.lineTo(mos.x + 900, mos.y);
+                    CTX.stroke();
+                    CTX.beginPath();
+                    CTX.moveTo(mos.x, mos.y);
+                    CTX.lineTo(mos.x, mos.y - 600);
+                    CTX.stroke();
+                    CTX.beginPath();
+                    CTX.moveTo(mos.x, mos.y);
+                    CTX.lineTo(mos.x, mos.y + 600);
+                    CTX.stroke();
+                }
+                if(freezeFrames > 0 && type != "wall"){
+                    CTX.fillStyle = "#bbffff";
+                    CTX.globalAlpha = 0.5;
+                    roundRect(CTX, this.position.x - 5, this.position.y - 5, this.width + 10, this.height + 10, 5, true, false);
+                    CTX.globalAlpha = 1;
+                }
+        }
+        /*if(type != "player" && type != "shovel" && type != "wall" && type != "freeze" && type != "particle" && freezeFrames > 0){
+            CTX.fillStyle = "#00ffff";
+            CTX.globalAlpha = 0.7;
+            roundRect(CTX, this.position.x - 10, this.position.y - 10, this.width + 20, this.height + 20, true, false);
+            CTX.globalAlpha = 1;
+        }*/
+    },
+    this.applyForce = function(i, j){
+        this.velocity.x += i;
+        this.velocity.y += j;
+    }
+}
+document.onkeydown = function(e){
+    e = e || window.event;
+    switch(e.keyCode){
+        case 37:
+            playerAction("left");
+        break;
+        case 39:
+            playerAction("right");
+        break;
+        case 38:
+            playerAction("up");
+        break;
+        case 40:
+            playerAction("down");
+        break;
+        case 90:
+            playerAction("special");
+        break;
+        case 88:
+            playerAction("shovel");
+        break;
+        case 67:
+            playerAction("freeze");
+        break;
+    }
+    playerTurn = false;
+}
+function Transition(E, duration, newX, newY, newW, newH, type, object){
+    this.E = E;
+    this.duration = duration;
+    this.newX = newX;
+    this.newY = newY;
+    this.newW = newW;
+    this.newH = newH;
+    this.timer = 0;
+    this.dead = false;
+    this.type = type;
+    this.object = object;
+    this.update = function(){
+        this.timer++;
+        this.E.position.x = (this.E.position.x + (this.timer/this.duration) * (this.newX - this.E.position.x));
+        this.E.position.y = (this.E.position.y + (this.timer/this.duration) * (this.newY - this.E.position.y));
+        this.E.width = (this.E.width + (this.timer/this.duration) * (this.newW - this.E.width));
+        this.E.height = (this.E.height + (this.timer/this.duration) * (this.newH - this.E.height));
+        if(this.timer > this.duration * 0.3){
+/* || ((Math.abs(this.newX - this.E.position.x) < 0.1 && Math.abs(this.newX - this.E.position.X) != 0) && (Math.abs(this.newY - this.E.position.y) < 0.1 && Math.abs(this.newY - this.E.position.Y) != 0) && (Math.abs(this.newW - this.E.width) < 0.1 && Math.abs(this.newW - this.E.width) != 0) < 1 && (Math.abs(this.newH - this.E.height) < 0.1 && Math.abs(this.newH - this.E.height) != 0)){*/
+            this.dead = true;
+            this.E.position.x = this.newX;
+            this.E.position.y = this.newY;
+            this.E.width = this.newW;
+            this.E.height = this.newH;
+        }
+        return this.E;
+    };
+}
+function makeWall(coordX, coordY){
+    if(coordX >= 0 && coordX < GAME.pFieldDim.x && coordY >= 0 && coordY < GAME.pFieldDim.y){
+        if(tiles[coordY][coordX] == 0){
+            tiles[coordY][coordX] = 1;
+            var newWall = new Entity(20 + (coordX + 0.5) * (660/GAME.pFieldDim.x), 20 + (coordY + 0.5) * (560/GAME.pFieldDim.y), 1, 1, "wall", "#b56900", null, coordX, coordY);
+        entities.push(newWall);
+        var duration;
+        if(quickMode){
+            duration = 1;
+        }else{
+            duration = 30;
+        }
+        transitions.push(new Transition(newWall, duration, 20 + coordX * (660/GAME.pFieldDim.x), 20 + (coordY) * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, null, entities.length - 1));
+        }
+    }
+}
+function dig(coordX, coordY){
+    if(coordX >= 0 && coordX < GAME.pFieldDim.x && coordY >= 0 && coordY < GAME.pFieldDim.y){
+        var newShovel = new Entity(20 + coordX * (660/GAME.pFieldDim.x), 20 + coordY * (560/GAME.pFieldDim.y), 660/GAME.pFieldDim.x, 560/GAME.pFieldDim.y, "shovelM", "#dedede", null, null, null, true);
+        newShovel.lifespan = 40;
+        entities.push(newShovel);
+        for(var e in entities){
+            if(entities[e].coords.x == coordX && entities[e].coords.y == coordY){
+                tilesToClear.push([coordX, coordY]);
+            }
+        }
+    }
+}
+var willPopulate = false;
+function moveFromTo(obj, tag, coordX, coordY, newX, newY, id){
+    //console.log(newX);
+    if(newX >= 0 && newX < GAME.pFieldDim.x && newY >= 0 && newY < GAME.pFieldDim.y){
+        if(tiles[newY][newX] <= 0){
+            if(tiles[newY][newX] == -1){
+                willPopulate = true;
+            }
+            tiles[coordY][coordX] = 0;
+            tiles[newY][newX] = id;
+            if(quickMode){
+                duration = 1;
+            }else{
+                duration = 30;
+            }
+            transitions.push(new Transition(obj, duration, 20 + newX * (660/GAME.pFieldDim.x), 20 + newY * (560/GAME.pFieldDim.y), obj.width, obj.height, null, tag));
+            if(abilities[playerAbility] != "Null"){
+                makeWall(coordX, coordY);
+            }
+            return true;
+        }else{
+            return false;
+        }
+    }else{
+        return false;
+    }
+}
+function dist(x1, y1, x2, y2){
+    return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
+}
+function playerAction(action){
+    if(freezeFrames > 0 && playerTurn){
+        freezeFrames--;
+        if(freezeFrames == 0){
+            for(var i in entities){
+                if(entities[i].type != "player" && entities[i].type != "wall" && entities[i].type != "shovel" && entities[i].type != "particle" && entities[i].type != "freeze"){
+                    for(var j = 0; j < 10; j++){
+                        var newDirt = new Entity(20 + (entities[i].coords.x + 0.5) * (660/GAME.pFieldDim.x), 20 + (entities[i].coords.y + 0.5) * (560/GAME.pFieldDim.y), 5, 5, "particle", "#00dddd", null, null, null, true);
+                        newDirt.applyForce((random() - 0.5) * 4, (random() - 0.5) * 4);
+                        newDirt.lifespan = 40;
+                        entities.push(newDirt);
+                    }
+                }
+            }
+        }
+    }
+    switch(action){
+        //LRUD
+        case "left":
+            if(playerTurn){
+                if(abilities[playerAbility] != "Delta"){
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x - 1, player.coords.y, -1)){
+                        player.coords.x--;
+                        player.dir = 0;
+                    }
+                }else{
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x - 1, player.coords.y - 1, -1)){
+                        player.coords.x--;
+                        player.coords.y--;
+                        player.dir = 0;
+                    }
+                }
+            }
+        break;
+        case "right":
+            if(playerTurn){
+                if(abilities[playerAbility] != "Delta"){
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x + 1, player.coords.y, -1)){
+                        player.coords.x++;
+                        player.dir = 1;
+                    }
+                }else{
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x + 1, player.coords.y + 1, -1)){
+                        player.coords.x++;
+                        player.coords.y++;
+                        player.dir = 1;
+                    }
+                }
+            }
+        break;
+        case "up":
+            if(playerTurn){
+                if(abilities[playerAbility] != "Delta"){
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x, player.coords.y - 1, -1)){
+                        player.coords.y--;
+                        player.dir = 2;
+                    }
+                }else{
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x + 1, player.coords.y - 1, -1)){
+                        player.coords.x++;
+                        player.coords.y--;
+                        player.dir = 2;
+                    }
+                }
+            }
+        break;
+        case "down":
+            if(playerTurn){
+                if(abilities[playerAbility] != "Delta"){
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x, player.coords.y + 1, -1)){
+                        player.coords.y++;
+                        player.dir = 3;
+                    }
+                }else{
+                    if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x - 1, player.coords.y + 1, -1)){
+                        player.coords.x--;
+                        player.coords.y++;
+                        player.dir = 3;
+                    }
+                }
+            }
+        break;
+        case "special":
+            if(playerTurn){
+                switch(abilities[playerAbility]){
+                    case "Delta":
+                        for(var i in specialSauce){
+                            makeWall(player.coords.x + dDirs[player.dir][0] + specialSauce[i][0], player.coords.y + dDirs[player.dir][1] + specialSauce[i][1]);
+                        }
+                    break;
+                    case "Sigma":
+                        if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x + dirs[player.dir][0], player.coords.y + dirs[player.dir][1], -1)){
+                            player.coords.x += dirs[player.dir][0];
+                            player.coords.y += dirs[player.dir][1];
+                        }else{
+                            if(moveFromTo(player, "player", player.coords.x, player.coords.y, player.coords.x + LRUD[player.dir][0], player.coords.y + LRUD[player.dir][1], -1)){
+                                player.coords.x += LRUD[player.dir][0];
+                                player.coords.y += LRUD[player.dir][1];
+                            }
+                        }
+                        dig(player.coords.x + LRUD[player.dir][0], player.coords.y + LRUD[player.dir][1]);
+                    break;
+                    case "Bracket":
+                        for(var i in bracket[player.dir]){
+                            makeWall(player.coords.x + LRUD[player.dir][0] + bracket[player.dir][i][0], player.coords.y + LRUD[player.dir][1] + bracket[player.dir][i][1]);
+                        }
+                    break;
+                    default:
+                        for(var i in specialSauce){
+                            makeWall(player.coords.x + dirs[player.dir][0] + specialSauce[i][0], player.coords.y + dirs[player.dir][1] + specialSauce[i][1]);
+                        }
+                }
+            }
+        break;
+        case "shovel":
+            if(abilities[playerAbility] != "Delta"){
+                var y = player.coords.y + LRUD[player.dir][1];
+                var x = player.coords.x + LRUD[player.dir][0];
+            }else{
+                var y = player.coords.y + dDirs[player.dir][1];
+                var x = player.coords.x + dDirs[player.dir][0];
+            }
+            if(playerTurn && shovels > 0 && tiles[y][x] == 1){
+                dig(x, y);
+                if(playerAbility != "Lucifer"){
+                    shovels--;
+                }
+            }
+        break;
+        case "freeze":
+            if(freezes > 0 && playerTurn){
+                freezeFrames += 5;
+                freezes--;
+            }
+        break;
+    }
+    for(var I in tilesToClear){
+        for(var j in entities){
+            if(entities[j].coords.x == tilesToClear[I][0] && entities[j].coords.y == tilesToClear[I][1] && entities[j].type == "wall"){
+                entities.splice(j, 1);
+                tiles[tilesToClear[I][1]][tilesToClear[I][0]] = 0;
+                
+                for(var t = 0; t < 10; t++){
+                    var newDirt = new Entity(20 + (tilesToClear[I][0] + 0.5) * (660/GAME.pFieldDim.x), 20 + (tilesToClear[I][1] + 0.5) * (560/GAME.pFieldDim.y), 5, 5, "particle", "#b56900", null, null, null, true);
+                    newDirt.applyForce((random() - 0.5) * 4, (random() - 0.5) * 4);
+                    newDirt.lifespan = 40;
+                    entities.push(newDirt);
+                }
+            }
+        }
+    }
+    tilesToClear = [];
+    if(playerTurn && tilesToClear.length == 0){
+        for(var i in entities){
+            if(entities[i].type != "player" && entities[i].type != "wall"){
+                if(freezeFrames == 0 && entities[i].type != "shovel" && entities[i].type != "freeze"){
+                switch(entities[i].type){
+                    case "chaser":
+                    case "phaser":
+                        //console.log("ayy lmao");
+                        var nX = 0;
+                        var nY = 0;
+                        if(player.coords.x < entities[i].coords.x && tiles[entities[i].coords.y][entities[i].coords.x - 1] == 0){
+                            nX = -1;
+                        }else if(player.coords.x > entities[i].coords.x && tiles[entities[i].coords.y][entities[i].coords.x + 1] == 0){
+                            nX = 1;
+                        }
+                        if(player.coords.y < entities[i].coords.y && tiles[entities[i].coords.y - 1][entities[i].coords.x] == 0){
+                            nY = -1;
+                        }else if(player.coords.y > entities[i].coords.y && tiles[entities[i].coords.y + 1][entities[i].coords.x] == 0){
+                            nY = 1;
+                        }
+                        if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + nX, entities[i].coords.y + nY, 2)){
+                            entities[i].coords.x += nX;
+                            entities[i].coords.y += nY;
+                        }
+                    break;
+                    case "digger":
+                        if(entities[i].timer == 0){
+                            var availableMoves = [dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x - 1,
+                                                    entities[i].coords.y),
+                                                dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x + 1,
+                                                    entities[i].coords.y),
+                                                dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x,
+                                                    entities[i].coords.y - 1),
+                                                dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x,
+                                                    entities[i].coords.y + 1)];
+                            var minDist = 0;
+                            for(var I in availableMoves){
+                                if(availableMoves[I] < availableMoves[minDist]){
+                                    minDist = I;
+                                }
+                            }
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + LRUD[minDist][0], entities[i].coords.y + LRUD[minDist][1], 2)){
+                                entities[i].coords.x += LRUD[minDist][0];
+                                entities[i].coords.y += LRUD[minDist][1];
+                            }
+                        }else if(entities[i].timer == 1){
+                            for(var I = -1; I < 2; I++){
+                                for(var j = -1; j < 2; j++){
+                                    dig(entities[i].coords.x + j, entities[i].coords.y + I);
+                                }
+                            }
+                        }
+                        entities[i].timer = (entities[i].timer + 1) % 2;
+                        //console.log(entities[i].timer);
+                    break;
+                    case "maker":
+                        if(entities[i].timer < 2){
+                            var availableMoves = [dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x - 1,
+                                                    entities[i].coords.y),
+                                                dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x + 1,
+                                                    entities[i].coords.y),
+                                                dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x,
+                                                    entities[i].coords.y - 1),
+                                                dist(player.coords.x,
+                                                    player.coords.y,
+                                                    entities[i].coords.x,
+                                                    entities[i].coords.y + 1)];
+                            var minDist = 0;
+                            for(var I in availableMoves){
+                                if(availableMoves[I] < availableMoves[minDist]){
+                                    minDist = I;
+                                }
+                            }
+                            //console.log(minDist);
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + LRUD[minDist][0], entities[i].coords.y + LRUD[minDist][1], 3)){
+                                entities[i].coords.x += LRUD[minDist][0];
+                                entities[i].coords.y += LRUD[minDist][1];
+                            }
+                        }
+                        if(entities[i].timer == 0){
+                            makeWall(entities[i].coords.x + 1, entities[i].coords.y - 1);
+                            makeWall(entities[i].coords.x - 1, entities[i].coords.y + 1);
+                        }else if(entities[i].timer == 1){
+                            makeWall(entities[i].coords.x - 1, entities[i].coords.y - 1);
+                            makeWall(entities[i].coords.x + 1, entities[i].coords.y + 1);
+                        }
+                        entities[i].timer = (entities[i].timer + 1) % 3;
+                    break;
+                    case "hybrid":
+                        if(entities[i].timer == 0){
+                            //console.log("ayy lmao");
+                            var nX = 0;
+                            var nY = 0;
+                            if(player.coords.x < entities[i].coords.x && tiles[entities[i].coords.y][entities[i].coords.x - 1] == 0){
+                                nX = -1;
+                            }else if(player.coords.x > entities[i].coords.x && tiles[entities[i].coords.y][entities[i].coords.x + 1] == 0){
+                                nX = 1;
+                            }
+                            if(player.coords.y < entities[i].coords.y && tiles[entities[i].coords.y - 1][entities[i].coords.x] == 0){
+                                nY = -1;
+                            }else if(player.coords.y > entities[i].coords.y && tiles[entities[i].coords.y + 1][entities[i].coords.x] == 0){
+                                nY = 1;
+                            }
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + nX, entities[i].coords.y + nY, 4)){
+                                entities[i].coords.x += nX;
+                                entities[i].coords.y += nY;
+                            }else{
+                                dig(entities[i].coords.x + nX, entities[i].coords.y + nY);
+                                dig(entities[i].coords.x + nX + 1, entities[i].coords.y + nY);
+                                dig(entities[i].coords.x + nX - 1, entities[i].coords.y + nY);
+                                dig(entities[i].coords.x + nX, entities[i].coords.y + nY - 1);
+                                dig(entities[i].coords.x + nX, entities[i].coords.y + nY + 1);
+                                entities[i].timer = 4;
+                                if(abilities[playerAbility] == "Null"){
+                                    entities[i].timer += 4;
+                                }
+                            }
+                        }else{
+                            entities[i].timer--;
+                        }
+                    break;
+                    case "lunger":
+                        if(player.coords.x == entities[i].coords.x){
+                            var pY = entities[i].coords.y;
+                            var y = entities[i].coords.y;
+                            if(player.coords.y > y){
+                                y++;
+                            }else{
+                                y--;
+                            }
+                            while(tiles[y][entities[i].coords.x] == 0){
+                                pY = y;
+                                if(player.coords.y > y){
+                                    y++;
+                                }else{
+                                    y--;
+                                }
+                            }
+                            dig(entities[i].coords.x, y);
+                            console.log(tiles[y][entities[i].coords.x]);
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x, pY, 6)){
+                                console.log("Gangnam stah");
+                                entities[i].coords.y = pY;
+                            }
+                        }
+                        if(player.coords.y == entities[i].coords.y){
+                            var pX = entities[i].coords.x;
+                            var x = entities[i].coords.x;
+                            if(player.coords.x > x){
+                                x++;
+                            }else{
+                                x--;
+                            }
+                            while(tiles[entities[i].coords.y][x] == 0){
+                                pX = x;
+                                if(player.coords.x > x){
+                                    x++;
+                                }else{
+                                    x--;
+                                }
+                            }
+                            dig(x, entities[i].coords.y);
+                            console.log(tiles[entities[i].coords.y][x]);
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, pX, entities[i].coords.y, 6)){
+                                console.log("Gangnam stah");
+                                entities[i].coords.x = pX;
+                            }
+                        }
+                    break;
+                    case "crazy":
+                        if(entities[i].timer % 3 == 0){
+                            var availableMoves = [];
+                            for(var k in knightMoves){
+                                var K = knightMoves[k];
+                                if(entities[i].coords.y + K[1] >= 0 && entities[i].coords.y + K[1] < GAME.pFieldDim.y && entities[i].coords.x + K[0] >= 0 && entities[i].coords.x + K[0] < GAME.pFieldDim.x){
+                                    if(tiles[entities[i].coords.y + K[1]][entities[i].coords.x + K[0]] == 0){
+                                        availableMoves.push(knightMoves[k]);
+                                    }
+                                }
+                            }
+                            //console.log(availableMoves.length);
+                            if(availableMoves.length > 0){
+                                var move = availableMoves[Math.floor(random() * availableMoves.length)];
+                                if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + move[0], entities[i].coords.y + move[1], 8)){
+                                    entities[i].coords.x += move[0];
+                                    entities[i].coords.y += move[1];
+                                }
+                            }
+                        }else if(entities[i].timer % 3 == 1){
+                            dig(entities[i].coords.x + 1, entities[i].coords.y);
+                            dig(entities[i].coords.x - 1, entities[i].coords.y);
+                            dig(entities[i].coords.x, entities[i].coords.y - 1);
+                            dig(entities[i].coords.x, entities[i].coords.y + 1);
+                        }else if(entities[i].timer % 3 == 2){
+                            switch(Math.floor(entities[i].timer/3)){
+                                case 0:
+                                    makeWall(entities[i].coords.x + 1,entities[i].coords.y - 1);
+                                break;
+                                case 1:
+                                    makeWall(entities[i].coords.x + 1,entities[i].coords.y + 1);
+                                break;
+                                case 2:
+                                    makeWall(entities[i].coords.x - 1,entities[i].coords.y + 1);
+                                break;
+                                case 3:
+                                    makeWall(entities[i].coords.x - 1,entities[i].coords.y - 1);
+                                break;
+                            }
+                        }
+                        entities[i].timer = (entities[i].timer + 1) % 12;
+                    break;
+                    case "trapper":
+                        if(entities[i].coords.x == player.coords.x || entities[i].coords.y == player.coords.y){
+                            var x = entities[i].coords.x;
+                            var y = entities[i].coords.y;
+                            for(var j = -3; j < 4; j++){
+                                for(var l = -3; l < 4; l++){
+                                    if(j == -3 || j == 3 || l == -3 || l == 3){
+                                        makeWall(x + j, y + l);
+                                    }
+                                }
+                            }
+                        }
+                    break;
+                    case "thinker":
+                        var slope = (GAME.pFieldDim.y - player.coords.y)/(GAME.pFieldDim.x - player.coords.x);
+                        var yInt = -(slope * player.coords.x - player.coords.y);
+                        var yInt2 = entities[i].coords.y - (-1/slope) * entities[i].coords.x;
+                        var pointIntersection = {
+                            x: (yInt2 - yInt)/(slope + 1/slope)
+                        }
+                        pointIntersection.y = pointIntersection.x*slope + yInt;
+                        CTX.beginPath();
+                        CTX.moveTo(entities[i].position.x, entities[i].position.y);
+                        CTX.lineTo(pointIntersection.x * (660/GAME.pFieldDim.x), pointIntersection.y * (560/GAME.pFieldDim.y));
+                        CTX.stroke();
+                        //makeWall(Math.floor(pointIntersection.x), Math.floor(pointIntersection.y));
+                        //console.log(pointIntersection);
+                        var validMoves = [];
+                        for(var dir in LRUD){
+                            var numTouching = 0;
+                            var xo = entities[i].coords.x + LRUD[dir][0];
+                            var yo = entities[i].coords.y + LRUD[dir][1];
+                            for(var dir2 in LRUD){
+                                var x = entities[i].coords.x + LRUD[dir][0] + LRUD[dir2][0];
+                                var y = entities[i].coords.y + LRUD[dir][1] + LRUD[dir2][1];
+                                //console.log(x);
+                                //console.log(y);
+                                if(x >= 0 && x < GAME.pFieldDim.x && y >= 0 && y < GAME.pFieldDim.y){
+                                    //console.log("ayy lmao2");
+                                    if(tiles[y][x] != 0){
+                                        numTouching++;
+                                        //console.log("ayy lmao2");
+                                    }
+                                }else{
+                                    numTouching++;
+                                }
+                            }
+                            if(xo >= 0 && xo < GAME.pFieldDim.x && yo >= 0 && yo < GAME.pFieldDim.y){
+                                if(numTouching < 4 && tiles[yo][xo] == 0){
+                                    validMoves.push(LRUD[dir]);
+                                }
+                            }
+                        }
+                        if(validMoves.length > 1){
+                            var dists = [];
+                            var minDist = 0;
+                            if(dist(entities[i].coords.x, entities[i].coords.y, pointIntersection.x, pointIntersection.y) < 2){
+                                for(var move in validMoves){
+                                    var newDist = dist(entities[i].coords.x + validMoves[move][0], entities[i].coords.y + validMoves[move][1], player.coords.x, player.coords.y);
+                                    if(dists.length > 0){
+                                        if(newDist < dists[move - 1]){
+                                            minDist = move;
+                                        }
+                                    }
+                                    dists.push(newDist);
+                                }
+                                console.log("On point!");
+                            }else{
+                                var dists = [];
+                                var minDist = 0;
+                                for(var move in validMoves){
+                                    var newDist = dist(entities[i].coords.x + validMoves[move][0], entities[i].coords.y + validMoves[move][1], pointIntersection.x, pointIntersection.y);
+                                    if(dists.length > 0){
+                                        if(newDist < dists[move - 1]){
+                                            minDist = move;
+                                        }
+                                    }
+                                    dists.push(newDist);
+                                }
+                                console.log("Not on point!");
+                            }
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + validMoves[minDist][0], entities[i].coords.y + validMoves[minDist][1], 10)){
+                                entities[i].coords.x += validMoves[minDist][0];
+                                entities[i].coords.y += validMoves[minDist][1];
+                            }
+                        }else if(validMoves.length == 1){
+                            if(moveFromTo(entities[i], i, entities[i].coords.x, entities[i].coords.y, entities[i].coords.x + validMoves[0][0], entities[i].coords.y + validMoves[0][1], 10)){
+                                entities[i].coords.x += validMoves[0][0];
+                                entities[i].coords.y += validMoves[0][1];
+                            }
+                        }
+                    break;
+                }
+                }
+                if(entities[i].type == "phaser"){
+                    if(entities[i].timer == 0){
+                        entities[i].color = "#ff44ff";
+                    }else{
+                        entities[i].color = "white";
+                    }
+                    entities[i].timer = (entities[i].timer + 1) % 4;
+                }
+                if((entities[i].coords.y == player.coords.y && Math.abs(player.coords.x - entities[i].coords.x) <= 1) || (entities[i].coords.x == player.coords.x && Math.abs(player.coords.y - entities[i].coords.y) <= 1)){
+                    if(entities[i].type != "shovel" && entities[i].type != "freeze" && freezeFrames == 0){
+                        willPopulate = true;
+                    }else if(entities[i].coords.x == player.coords.x && entities[i].coords.y == player.coords.y){
+                        if(entities[i].type == "shovel"){
+                            shovels++;
+                        }else if(entities[i].type == "freeze"){
+                            freezes++;
+                        }
+                        entities.splice(i, 1);
+                    }
+                }
+            }
+        }
+    }
+    playerTurn = false;
+}
+function drawTransitions(){
+    for(var i = 0; i < transitions.length; i++){
+        //console.log(typeof(transitions[i]));
+        if(transitions[i].object == "player"){
+            player = transitions[i].update();
+            //console.log("ayy lmao");
+        }else{
+            entities[transitions[i].object] = transitions[i].update();
+        }
+        if(transitions[i].dead){
+            transitions.splice(i, 1);
+            //alert("Transition complete.");
+        }
+    }
+    if(transitions.length == 0){
+        if(player.coords.x > GAME.pFieldDim.x - 4 && player.coords.y > GAME.pFieldDim.y - 4){
+            moveFromTo(player, "player", player.coords.x, player.coords.y, 0, 0, -1);
+            GAME.level++;
+            if((GAME.level % 1 == 0 && difficultyLevel == 0) || (GAME.level % 5 == 0 && difficultyLevel != 3)){
+                alert("Checkpoint reached!");
+                GAME.checkpoint = GAME.level;
+                localStorage.lvl = GAME.level;
+                if(abilities[playerAbility] != "Lucifer"){
+                    localStorage.shovels = shovels;
+                }
+                localStorage.freezes = freezes;
+                if(difficultyLevel == 4){
+                    localStorage.seed = seed;
+                    localStorage.seed2 = seed2;
+                    localStorage.timer = msTimer;
+                }
+            }
+            if(GAME.level == 50 && difficultyLevel == 4){
+                alert("50-level Speedrun complete!\n\nTime" + document.getElementById("timer").innerHTML);
+            }
+            changeProb(GAME.level);
+            populate();
+        }
+        if(willPopulate){
+            alert("CODE 0xDEADBEEF");
+            GAME.level = GAME.checkpoint;
+            shovels = Number(localStorage.shovels);
+            console.log(freezes);
+            freezes = Number(localStorage.freezes);
+            console.log(freezes);
+            changeProb(GAME.level);
+            populate();
+            moveFromTo(player, "player", player.coords.x, player.coords.y, 0, 0, -1);
+            willPopulate = false;
+        }
+        if(!playerTurn){
+            playerTurn = true;
+        }
+    }
+}
+function drawPlayingField(){
+    var CTX = GAME.context;
+    //CTX.fillStyle = "#fff0cc";
+    CTX.fillStyle = "#dddddd";
+    roundRect(GAME.context, 0, 0, 700, 600, 20, true, false);
+    CTX.fillStyle = "white";
+    for(var i = 0; i < GAME.pFieldDim.x; i++){
+        for(var j = 0; j < GAME.pFieldDim.y; j++){
+            if(i > GAME.pFieldDim.x - 4 && j > GAME.pFieldDim.y - 4){
+                CTX.fillStyle = "#BBFFBB";
+            }else{
+                CTX.fillStyle = "white";
+            }
+            roundRect(GAME.context, 20 + i * (660/GAME.pFieldDim.x), 20 + j * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, 5, true, false);
+        }
+        //console.log(i);
+    }
+    //Wall drawing
+    CTX.fillStyle = "black";
+    CTX.font = "20px Lucida Console";
+    CTX.fillText("Floor: " + GAME.level, 710, 30);
+    CTX.fillText("Shovels: " + shovels, 710, 50);
+    CTX.fillText("Freezes: " + freezes, 710, 70);
+    CTX.globalAlpha = 0.5;
+    CTX.font = "100px Arial";
+    if(freezeFrames > 0){
+        CTX.fillText(freezeFrames.toString(), 300, 250);
+    }
+    CTX.globalAlpha = 1;
+};
+function makeItDark(){
+    var CTX = GAME.context;
+    CTX.fillStyle = "black";
+    for(var i = 0; i < GAME.pFieldDim.x; i++){
+        for(var j = 0; j < GAME.pFieldDim.y; j++){
+            if(player.coords.x != i || player.coords.y != j){
+                CTX.globalAlpha = Math.min(1, dist(player.coords.x, player.coords.y, i, j)/10);
+                CTX.fillRect(20 + i * (660/GAME.pFieldDim.x), 20 + j * (560/GAME.pFieldDim.y), 660/GAME.pFieldDim.x, 560/GAME.pFieldDim.y);
+                CTX.globalAlpha = 1;
+            }
+        }
+        //console.log(i);
+    }
+}
+function draw(){
+    GAME.clear();
+    drawTransitions();
+    drawPlayingField();
+    player.draw();
+    for(var i in entities){
+        entities[i].draw();
+        if(entities[i].timer > entities[i].lifespan){
+            entities.splice(i, 1);
+        }
+    }
+    if(abilities[playerAbility] == "Lucifer"){
+        shovels = 1;
+        makeItDark();
+    }
+    for(var i in texts){
+        texts[i].draw();
+    }
+    GAME.frameCount++;
+}
+function resetProgress(bypass){
+    var areUSure;
+    if(bypass == undefined || bypass == false){
+        areUSure = confirm("Are you sure?");
+    }else{
+        areUSure = true;
+    }
+    if(areUSure){
+        if(!bypass){
+            var diffLevel = Math.min(Number(prompt("Type in a number from 0 to 4 to select difficulty", "0")), 4);
+            difficultyLevel = diffLevel;
+        }
+        GAME.checkpoint = 0;
+        localStorage.lvl = GAME.checkpoint;
+        localStorage.shovels = 0;
+        localStorage.freezes = 0;
+        localStorage.timer = 0;
+        shovels = 0;
+        freezes = 0;
+        GAME.level = GAME.checkpoint;
+        changeProb(GAME.level);
+        populate();
+        if(!bypass){
+            alert("CODE 0xDEADBEEF");
+        }
+        moveFromTo(player, "player", player.coords.x, player.coords.y, 0, 0, -1);
+        willPopulate = false;
+        //alert("Progress deleted.");
+    }
+}
+function instructions(hint){
+    var l = GAME.level;
+    if(hint){
+        if(l == 0){
+            alert("Press the arrow keys or buttons to move.\nThe SPECIAL button, which can be used with the z key, will create a box to trap enemies.\nMove to the green area to advance, and don\'t let any of the enemies touch you.\nThe X key activates shovels, which dig one wall.\nThe C key activates freezes, which freeze enemies in place for 5 turns, preventing death.");
+        }else if(l < 3){
+            alert("The chasers, which are red, will almost always move faster than you, so all you can do is trap them.\nRush toward them, then use SPECIAL when they get close.\nBut not too close.");
+        }else if(l < 4){
+            alert("The diggers are literally unstoppable.\nThey are slow, however.\n\n...green isn\'t always good.");
+        }else if(l < 7){
+            alert("Makers:\nslower than the chasers,\nfaster than the diggers.");
+        }else if(l == 7){
+            alert("What do you get when you cross a chaser with a digger and add stun when digging?");
+        }else if(l < 10){
+            alert("Yeah, all the enemies so far have a really dumb AI.\nChasers and Hybrids are pretty fast, though.\nAnd Diggers don't care about walls.");
+        }else if(l == 10){
+            alert("Beware of purple.");
+        }else if(l < 15){
+            alert("At this point, you don't need any help.\nJust keep pushing, and try not to corner yourself.");
+        }else if(l == 15){
+            alert("Pay close attention. Bump against walls if you have to.");
+        }else if(l == 16){
+            alert("At this point, you've probably noticed that the density of walls gets thicker as the game progresses.");
+        }else if(l < 20){
+            alert("Why are you even reading this? There's nothing new to see.");
+        }else if(l == 20){
+            alert("We're going to take a little break now.");
+        }else if(l == 21){
+            alert("Aaaaaaand we're back.");
+        }else if(l == 30){
+            alert("Surprises everywhere.");
+        }else if(l == 42){
+            alert("Better hope you saved your shovels.");
+        }else if(l > 42){
+            alert("All you can do now to pass is hope and pray.");
+        }else{
+            alert("zzzzzcan'thelpnowzzzzz");
+        }
+    }else{
+        alert("Press the arrow keys or buttons to move.\nThe SPECIAL button, which can be used with the z key, will create a box to trap enemies.\nMove to the green area to advance, and don\'t let any of the enemies touch you.\nThe X key activates shovels, which dig one wall.\nThe C key activates freezes, which freeze enemies in place for 5 turns, preventing death.");
+    }
+}
+function toggleQuickMode(){
+    if(!quickMode){
+        alert("Quick mode on.");
+        quickMode = true;
+    }else{
+        alert("Quick mode off");
+        quickMode = false;
+    }
+}
+var timerInterval;
+function speedrunMode(){
+    var speedRunOn = confirm("Are you sure you want to enable speedrun mode?\n\nWARNING: You MUST complete this in one go, or else it will revert back to normal mode.");
+    if(speedRunOn){
+        var prevSeed = confirm("Use previous seed?");
+        var seedLabel = document.getElementById("seed");
+        if(prevSeed){
+            if(localStorage.seed && localStorage.seed2 && localStorage.seedstr){
+                loadSeed();
+                seedLabel.innerHTML = localStorage.seedstr;
+                populate();
+                msTimer = localStorage.timer;
+                timerInterval = setInterval(incrementTimer, 10);
+            }else{
+                alert("No seed found.");
+            }
+        }else{
+            var seedstr = prompt("Enter seed:");
+            if(seedstr.length > 2){
+                localStorage.seedstr = seedstr;
+                seedLabel.innerHTML = seedstr;
+                difficultyLevel = 4;
+                var seedstr1 = seedstr.slice(0, Math.ceil(seedstr.length/2));
+                var seedstr2 = seedstr.slice(Math.ceil(seedstr.length/2), seedstr.length);
+                var seedproc1 = "";
+                var seedproc2 = "";
+                for(var i in seedstr1){
+                    seedproc1 += (seedstr1.charCodeAt(i)).toString(2);
+                }
+                for(var i2 in seedstr2){
+                    seedproc2 += (seedstr2.charCodeAt(i2)).toString(2);
+                }
+                seed = parseInt(seedproc1, 2);
+                seed2 = parseInt(seedproc2, 2);
+                console.log(seed);
+                console.log(seed2);
+                localStorage.timer = 0;
+                resetProgress(true);
+                timerInterval = setInterval(incrementTimer, 10);
+            }else{
+                alert("Seed must be longer.");
+            }
+        }
+    }
+}
+
+function incrementTimer(){
+    if(difficultyLevel == 4 && GAME.level < 50){
+        var timerLabel = document.getElementById("timer");
+        var remainder = (msTimer % 100).toString();
+        var seconds = (Math.floor(msTimer / 100) % 60).toString();
+        var minutes = (Math.floor(msTimer / 6000) % 60).toString();
+        var hours = Math.floor(msTimer/360000).toString();
+        if(minutes.length < 2){
+            minutes = "0" + minutes;
+        }
+        if(seconds.length < 2){
+            seconds = "0" + seconds;
+        }
+        if(remainder.length < 2){
+            remainder = "0" + remainder;
+        }
+        timerLabel.innerHTML = hours + ":" + minutes + ":" + seconds + "." + remainder;
+        msTimer++;
+    }
+}
+function switchCharacter(){
+    playerAbility = (playerAbility + 1) % abilities.length;
+    alert("Current ability: " + abilities[playerAbility]);
+}
+function showEnemyInfo(){
+    
+}
+</script>
+</head>
+<body onload="init()">
+    <button type="button" class="move" onclick="playerAction('left')" style="position:absolute;left:950px;top:250px;">Left</button>
+    <button type="button" class="move" onclick="playerAction('right')" style="position:absolute;left:1150px;top:250px;">Right</button>
+    <button type="button" class="move" onclick="playerAction('up')" style="position:absolute;left:1050px;top:150px;">Up</button>
+    <button type="button" class="move" onclick="playerAction('down')" style="position:absolute;left:1050px;top:350px;">Down</button>
+    <button type="button" class="move" onclick="playerAction('special')" style="position:absolute;left:1050px;top:250px;">Special</button>
+    <button type="button" class="pup" onclick="playerAction('shovel')" style="position:absolute;left:950px;top:400px;">Shovel</button>
+    <button type="button" class="pup" onclick="playerAction('freeze')" style="position:absolute;left:1200px;top:400px;">Freeze</button>
+    <button type="button" onclick="resetProgress()">Reset Progress</button>
+    <button type="button" onclick="instructions(false)">How to Play</button>
+    <button type="button" onclick="toggleQuickMode()">Quick Mode</button>
+    <button type="button" onclick="speedrunMode()">Speedrun Mode</button>
+    <button type="button" onclick="switchCharacter()">Switch Ability</button>
+    <button type="button" onclick="showEnemyInfo()">Enemy Info</button>
+    <div id="seed"></div>
+    <div id="timer"></div>
+</body>
+</html>
