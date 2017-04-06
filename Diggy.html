@@ -94,7 +94,10 @@ var abilities = [
     "Delta",
     "Null",
     "Bracket",
-    "Lucifer"
+    "Lucifer",
+    "Braille",
+    "TRANS",
+    "Omega"
 ];
 var shovels = 0;
 var lives = 3;
@@ -576,7 +579,15 @@ function Entity(X, Y, width, height, type, color, text, coordX, coordY, friction
             break;
             default:
                 roundRect(CTX, this.position.x, this.position.y, this.width, this.height, (this.width + this.height)/10, true, false);
-                if(this.type == "lunger" && abilities[playerAbility] == "Lucifer"){
+                if(this.type == "hybrid" && !(abilities[playerAbility] == "Lucifer" || abilities[playerAbility] == "Braille") && this.timer > 0){
+                    CTX.fillStyle = "black";
+                    if(this.timer == 1){
+                        CTX.fillStyle = "red";
+                    }
+                    CTX.font = "16px Arial";
+                    CTX.fillText(this.timer, this.position.x + this.width/2 - 4, this.position.y + this.height/2 + 6);
+                }
+                if(this.type == "lunger" && (abilities[playerAbility] == "Lucifer" || abilities[playerAbility] == "Braille")){
                     //console.log("AYYY");
                     var mos = {
                         x: this.position.x + this.width/2,
@@ -606,6 +617,10 @@ function Entity(X, Y, width, height, type, color, text, coordX, coordY, friction
                     roundRect(CTX, this.position.x - 5, this.position.y - 5, this.width + 10, this.height + 10, 5, true, false);
                     CTX.globalAlpha = 1;
                 }
+        }
+        if(type != "shovel" && type != "freeze" && type != "shovelM" && abilities[playerAbility] == "Braille"){
+            CTX.fillStyle = "black";
+            CTX.fillRect(this.position.x, this.position.y, this.width, this.height);
         }
         /*if(type != "player" && type != "shovel" && type != "wall" && type != "freeze" && type != "particle" && freezeFrames > 0){
             CTX.fillStyle = "#00ffff";
@@ -839,6 +854,61 @@ function playerAction(action){
                             makeWall(player.coords.x + LRUD[player.dir][0] + bracket[player.dir][i][0], player.coords.y + LRUD[player.dir][1] + bracket[player.dir][i][1]);
                         }
                     break;
+                    case "TRANS":
+                        var x = player.coords.x;
+                        var y = player.coords.y;
+                        //playerTurn = true;
+                        while(x < GAME.pFieldDim.x - 1 && x >= 0 && y < GAME.pFieldDim.y - 1 && y >= 0){
+                            x += LRUD[player.dir][0];
+                            y += LRUD[player.dir][1];
+                            console.log(y);
+                            var setBreak = false;
+                            if(tiles[y][x] != 0){
+                                for(var e in entities){
+                                    if(entities[e].coords.x == x && entities[e].coords.y == y && entities[e].type != "wall"){
+                                        var INDEX = enemTypes.indexOf(entities[e].type) - 1;
+                                        if(INDEX == 6){
+                                            INDEX = 4;
+                                        }
+                                        entities[e].type = enemTypes[INDEX];
+                                        entities[e].color = enemColors[INDEX];
+                                        setBreak = true;
+                                        break;
+                                    }else{
+                                        setBreak = true;
+                                    }
+                                }
+                            }
+                            if(setBreak){
+                                break;
+                            }
+                        }
+                        CTX.fillStyle = "red";
+                        CTX.lineWidth = 5;
+                        CTX.beginPath();
+                        CTX.moveTo((player.coords.x + 1.5) * (660/GAME.pFieldDim.x), (player.coords.y + 1.5) * (560/GAME.pFieldDim.y));
+                        CTX.lineTo((x + 1.5) * (660/GAME.pFieldDim.x), (y + 1.5) * (560/GAME.pFieldDim.y));
+                        CTX.stroke();
+                    break;
+                    case "Omega":
+                        var x = player.coords.x;
+                        var y = player.coords.y;
+                        var c = 0;
+                        while(x < GAME.pFieldDim.x && x >= 0 && y < GAME.pFieldDim.y && y >= 0){
+                            c++; //lololol
+                            //console.log(x);
+                            x += LRUD[player.dir][0];
+                            y += LRUD[player.dir][1];
+                            if(c % 2 == 1){
+                                console.log("lolol: " + tiles[y][x])
+                                if(tiles[y][x] == 0){
+                                    makeWall(x, y);
+                                }else{
+                                    dig(x, y);
+                                }
+                            }
+                        }
+                    break;
                     default:
                         for(var i in specialSauce){
                             makeWall(player.coords.x + dirs[player.dir][0] + specialSauce[i][0], player.coords.y + dirs[player.dir][1] + specialSauce[i][1]);
@@ -868,13 +938,20 @@ function playerAction(action){
             }
         break;
     }
+    tilesToClear = tilesToClear.filter(
+        function(elem, index, self) {
+            return index == self.indexOf(elem);
+        }
+    );
+    console.log(tilesToClear);
+    //var countBreak = 0;
     for(var I in tilesToClear){
         for(var j in entities){
             if(entities[j].coords.x == tilesToClear[I][0] && entities[j].coords.y == tilesToClear[I][1] && entities[j].type == "wall"){
                 entities.splice(j, 1);
                 tiles[tilesToClear[I][1]][tilesToClear[I][0]] = 0;
-                
-                for(var t = 0; t < 10; t++){
+                //countBreak++;
+                for(var t = 0; t < 5; t++){
                     var newDirt = new Entity(20 + (tilesToClear[I][0] + 0.5) * (660/GAME.pFieldDim.x), 20 + (tilesToClear[I][1] + 0.5) * (560/GAME.pFieldDim.y), 5, 5, "particle", "#b56900", null, null, null, true);
                     newDirt.applyForce((random() - 0.5) * 4, (random() - 0.5) * 4);
                     newDirt.lifespan = 40;
@@ -883,6 +960,7 @@ function playerAction(action){
             }
         }
     }
+    //console.log("COUNT: " + countBreak.toString());
     tilesToClear = [];
     if(playerTurn && tilesToClear.length == 0){
         for(var i in entities){
@@ -1287,18 +1365,23 @@ function drawPlayingField(){
     var CTX = GAME.context;
     //CTX.fillStyle = "#fff0cc";
     CTX.fillStyle = "#dddddd";
+    if(abilities[playerAbility] == "Braille"){
+        CTX.fillStyle = "#ffffde";
+    }
     roundRect(GAME.context, 0, 0, 700, 600, 20, true, false);
-    CTX.fillStyle = "white";
-    for(var i = 0; i < GAME.pFieldDim.x; i++){
-        for(var j = 0; j < GAME.pFieldDim.y; j++){
-            if(i > GAME.pFieldDim.x - 4 && j > GAME.pFieldDim.y - 4){
-                CTX.fillStyle = "#BBFFBB";
-            }else{
-                CTX.fillStyle = "white";
+    if(abilities[playerAbility] != "Braille"){
+        CTX.fillStyle = "white";
+        for(var i = 0; i < GAME.pFieldDim.x; i++){
+            for(var j = 0; j < GAME.pFieldDim.y; j++){
+                if(i > GAME.pFieldDim.x - 4 && j > GAME.pFieldDim.y - 4){
+                    CTX.fillStyle = "#BBFFBB";
+                }else{
+                    CTX.fillStyle = "white";
+                }
+                roundRect(GAME.context, 20 + i * (660/GAME.pFieldDim.x), 20 + j * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, 5, true, false);
             }
-            roundRect(GAME.context, 20 + i * (660/GAME.pFieldDim.x), 20 + j * (560/GAME.pFieldDim.y), (660/GAME.pFieldDim.x) - 1, (560/GAME.pFieldDim.y) - 1, 5, true, false);
+            //console.log(i);
         }
-        //console.log(i);
     }
     //Wall drawing
     CTX.fillStyle = "black";
@@ -1496,6 +1579,7 @@ function incrementTimer(){
 }
 function switchCharacter(){
     playerAbility = (playerAbility + 1) % abilities.length;
+    shovels = localStorage.shovels;
     alert("Current ability: " + abilities[playerAbility]);
 }
 function showEnemyInfo(){
