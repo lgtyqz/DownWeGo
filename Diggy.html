@@ -250,7 +250,7 @@ var featureProbs = [
     0.05,
     0.02,
     0.075,
-    0.1
+    0.15
 ];
 var images = {
     shovel: new Image(),
@@ -314,6 +314,10 @@ function changeProb(){
         clearProb();
         prob.lunger = 0.5;
         prob.maker = 0.5;
+    }else if(l == 12){
+        clearProb();
+        prob.chaser = 0.5;
+        prob.digger = 0.5;
     }else if(l < 15){
         prob.chaser = 0.45;
         prob.hybrid = 0.05;
@@ -333,6 +337,9 @@ function changeProb(){
     }else if(l == 20){
         clearProb();
         prob.crazy = 1;
+    }else if(l == 23){
+        clearProb();
+        prob.hybrid = 1;
     }else if(l < 30){
         prob.chaser = 0.05;
         prob.hybrid = 0.05;
@@ -345,6 +352,19 @@ function changeProb(){
         clearProb();
         prob.trapper = 0.75;
         prob.digger = 0.25;
+    }else if(l == 32 && abilities[playerAbility] != "TRANS"){
+        clearProb();
+        prob.wall = 0.05;
+        prob.lunger = 1;
+    }else if(l == 35){
+        clearProb();
+        prob.wall = 0.3;
+        prob.digger = 0.75;
+        prob.crazy = 0.25;
+    }else if(l == 40){
+        clearProb();
+        prob.digger = 0.5;
+        prob.phaser = 0.5;
     }else if(l < 42){
         prob.chaser = 0.05;
         prob.hybrid = 0.1;
@@ -359,6 +379,23 @@ function changeProb(){
         prob.wall = 0;
         prob.thinker = 0.75;
         prob.digger = 0.25;
+    }else if(l == 45){
+        clearProb();
+        prob.wall = 0;
+        if(abilities[playerAbility] == "Null"){
+            prob.wall = 0.3;
+        }
+        prob.hybrid = 0.65;
+        prob.lunger = 0.1;
+        prob.maker = 0.25;
+    }else if(l == 47){
+        clearProb();
+        prob.wall = 0.3;
+        prob.thinker = 0.33;
+        prob.maker = 0.67;
+    }else if(l == 49){
+        clearProb();
+        prob.thinker = 1;
     }else{
         prob.chaser = 0.05;
         prob.hybrid = 0.15;
@@ -994,9 +1031,17 @@ function playerAction(action){
     );
     //console.log(tilesToClear);
     //var countBreak = 0;
+    for(var j = entities.length - 1; j >= 0; j--){
+        if(entities[j] == undefined){
+            //console.log(entities[j]);
+            entities.splice(j, 1);
+            //console.log(entities.length);
+        }
+    }
     for(var I in tilesToClear){
         for(var j in entities){
-            if(entities[j].coords.x == tilesToClear[I][0] && entities[j].coords.y == tilesToClear[I][1] && entities[j].type == "wall"){
+            if((entities[j].coords.x == tilesToClear[I][0] && entities[j].coords.y == tilesToClear[I][1] && entities[j].type == "wall")){
+                //console.log(tiles[tilesToClear[I][1]][tilesToClear[I][0]]);
                 entities.splice(j, 1);
                 tiles[tilesToClear[I][1]][tilesToClear[I][0]] = 0;
                 //countBreak++;
@@ -1622,10 +1667,22 @@ function instructions(hint){
             alert("We're going to take a little break now.");
         }else if(l == 21){
             alert("Aaaaaaand we're back.");
+        }else if(l == 23){
+            alert("You remember floor 7, with all those blasted hybrids?");
         }else if(l == 30){
             alert("Surprises everywhere.");
+        }else if(l == 32){
+            alert("Be very careful around here.\nYou never know what's lurking around the corner...");
+        }else if(l == 35){
+            alert("CAUTION! Congestion ahead.\nThe digging crew is already on its way.");
         }else if(l == 42){
-            alert("Better hope you saved your shovels.");
+            alert("Better hope you saved your shovels & freezes.");
+        }else if(l == 45){
+            alert("You can no longer cower from your foes.\nIn order to conquer your fears, you must face them directly.");
+        }else if(l == 47){
+            alert("CAUTION! Congestion ahead.\n\n...\n\nWhoops, wrong crew.");
+        }else if(l == 49){
+            alert("The penultimate level.");
         }else if(l > 42 && l < 51){
             alert("All you can do now to pass is hope and pray.");
         }else if(l < 42){
